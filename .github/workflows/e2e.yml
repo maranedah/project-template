@@ -1,0 +1,45 @@
+# Reusable E2E vs a deployed environment. Chrome ships on ubuntu-latest runners;
+# Selenium Manager resolves the driver. Screenshots always upload as artifacts.
+# Skips gracefully until the environment URL secret exists (E2E_BASE_URL_DEV/PROD).
+name: e2e
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  selenium:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve target URL
+        id: target
+        run: echo "url=${{ inputs.environment == 'prod' && secrets.E2E_BASE_URL_PROD || secrets.E2E_BASE_URL_DEV }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        if: steps.target.outputs.url != ''
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: frontend/e2e/requirements.txt
+
+      - name: Run suite (parallel)
+        if: steps.target.outputs.url != ''
+        env:
+          E2E_BASE_URL: ${{ steps.target.outputs.url }}
+        working-directory: frontend/e2e
+        run: |
+          pip install -r requirements.txt
+          pytest -n auto
+
+      - name: Upload screenshots
+        if: always() && steps.target.outputs.url != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots-${{ inputs.environment }}
+          path: frontend/e2e/screenshots/
+          retention-days: 7

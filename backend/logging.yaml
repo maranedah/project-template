@@ -1,0 +1,33 @@
+# Per-microservice logging config (rule: every service ships its own logging.yaml).
+# - All lines timestamped, full stream to stdout (Cloud Logging picks this up).
+# - ERROR and above ALSO written to var/log/backend-errors.log so a debugging session
+#   (human or LLM) reads one small file instead of interleaved multi-service stdout,
+#   without needing to know which machine/service produced the error.
+# The worker loads this file and swaps the filename to worker-errors.log (worker.py).
+# Loaded by uvicorn via --log-config (see docker-compose.yml).
+version: 1
+disable_existing_loggers: false
+formatters:
+  standard:
+    format: "%(asctime)s %(levelname)s %(name)s %(message)s"
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: standard
+    stream: ext://sys.stdout
+  errors:
+    class: logging.FileHandler
+    formatter: standard
+    filename: var/log/backend-errors.log
+    level: ERROR
+    delay: true
+root:
+  level: INFO
+  handlers: [console, errors]
+loggers:
+  uvicorn:
+    level: INFO
+  uvicorn.error:
+    level: INFO
+  uvicorn.access:
+    level: INFO

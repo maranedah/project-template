@@ -1,0 +1,5 @@
+# Keep the image build context small; e2e never ships in the image.
+node_modules
+dist
+e2e
+*.tsbuildinfo

@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make *)",
+      "Bash(docker compose *)",
+      "Bash(python3 *)",
+      "Bash(backend/.venv/bin/*)",
+      "Bash(pytest *)",
+      "Bash(ruff *)",
+      "Bash(alembic *)",
+      "Bash(npm run *)",
+      "Bash(npm ci)",
+      "Bash(ls *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(find *)",
+      "Bash(curl -fsS localhost*)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git push origin feat*)",
+      "Bash(git push -u origin feat*)",
+      "Bash(git push origin develop)",
+      "Bash(gh run watch *)",
+      "Bash(gh run list *)",
+      "Bash(gh pr *)"
+    ],
+    "deny": [
+      "Bash(git push origin main*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard*)",
+      "Bash(terraform apply*)",
+      "Bash(terraform destroy*)",
+      "Read(./.env)",
+      "Read(./.env.local)"
+    ]
+  }
+}

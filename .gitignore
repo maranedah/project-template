@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Tool caches
+.import_linter_cache/
+
+# Env & secrets — never commit
+.env
+.env.local
+*-sa-key.json
+
+# Runtime output
+backend/var/log/*
+!backend/var/log/.gitkeep
+frontend/e2e/screenshots/*
+!frontend/e2e/screenshots/.gitkeep
+
+# Terraform
+.terraform/
+*.tfstate*
+terraform.tfvars
+
+# OS / editor
+.DS_Store
+*.swp

@@ -1,0 +1,42 @@
+# Packs the backend as the `app` library (pip install -e .) so imports never depend
+# on the working directory. Dependency PINS live in requirements*.txt (exact ==);
+# this file deliberately declares none to keep a single source of truth.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "PROJECT_NAME-backend"
+version = "0.1.0"
+description = "Backend service"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+# unittest.TestCase classes, executed in parallel by pytest-xdist.
+addopts = "-ra -n auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+# Hexagonal layering, enforced mechanically (make lint / CI). composition.py and
+# worker.py sit outside the layers on purpose — they are the wiring roots.
+[[tool.importlinter.contracts]]
+name = "Hexagonal layers: infrastructure -> application -> domain"
+type = "layers"
+layers = ["app.infrastructure", "app.application", "app.domain"]
+
+[[tool.importlinter.contracts]]
+name = "Domain is pure (no frameworks)"
+type = "forbidden"
+source_modules = ["app.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "pydantic", "pydantic_settings"]

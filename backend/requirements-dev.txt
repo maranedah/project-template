@@ -1,0 +1,6 @@
+# Development/test dependencies — exact pins (== only).
+pytest==9.1.1
+pytest-xdist==3.8.0
+ruff==0.16.3
+import-linter==2.13
+httpx==0.28.1

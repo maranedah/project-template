@@ -1,0 +1,3 @@
+# Migration image dependencies — exact pins (== only). Alembic + driver, nothing else.
+alembic==1.19.1
+psycopg[binary]==3.3.4

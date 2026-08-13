@@ -1,0 +1,9 @@
+# Runtime dependencies — exact pins (template policy: == only, never >=).
+# Upgrade deliberately: bump here, run `make verify`, commit pin + result together.
+fastapi==0.141.1
+uvicorn[standard]==0.52.2
+pydantic==2.13.4
+pydantic-settings==2.15.0
+sqlalchemy==2.0.52
+psycopg[binary]==3.3.4
+pyyaml==6.0.3

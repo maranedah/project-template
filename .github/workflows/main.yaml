@@ -1,0 +1,41 @@
+# Composer: every child is a reusable workflow (workflow_call + secrets: inherit).
+# Flow: feat/** push → checks+build (validation only). develop push → deploy dev → e2e.
+# PR develop→main → checks+build (merge gate). main merge → deploy prod → e2e.
+# Task completion = this run green on the feature branch (gh run watch).
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop, "feat/**"]
+  pull_request:
+    branches: [main]
+
+# One run per branch; superseded runs are cancelled early (saves runner time).
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+    secrets: inherit
+
+  build-images:
+    needs: [checks]
+    uses: ./.github/workflows/build-images.yml
+    secrets: inherit
+
+  deploy:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    needs: [build-images]
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+    secrets: inherit
+
+  e2e:
+    needs: [deploy]
+    uses: ./.github/workflows/e2e.yml
+    with:
+      environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+    secrets: inherit

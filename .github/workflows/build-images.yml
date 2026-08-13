@@ -1,0 +1,60 @@
+# Reusable image builds. Deploy-time optimizations:
+#   - paths-filter: an image only rebuilds when its context changed (docs-only pushes
+#     build nothing).
+#   - buildx + GHA layer cache: dependency layers come from cache across runs.
+# FILL on first deploy: registry login + push (Artifact Registry), tags :sha + :latest.
+name: build-images
+
+on:
+  workflow_call:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      db: ${{ steps.filter.outputs.db }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '!backend/db/**'
+            db:
+              - 'backend/db/**'
+            frontend:
+              - 'frontend/**'
+              - '!frontend/e2e/**'   # e2e suite doesn't ship in the image
+
+  build:
+    needs: changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            changed: ${{ needs.changes.outputs.backend }}
+          - name: db
+            context: ./backend/db
+            changed: ${{ needs.changes.outputs.db }}
+          - name: frontend
+            context: ./frontend
+            changed: ${{ needs.changes.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+        if: matrix.changed == 'true'
+      - uses: docker/setup-buildx-action@v3
+        if: matrix.changed == 'true'
+      - name: Build ${{ matrix.name }}
+        if: matrix.changed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: false   # FILL on first deploy: push to Artifact Registry, tag with github.sha
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max

@@ -1,0 +1,63 @@
+# Reusable terraform deploy. Keyless GCP auth (Workload Identity Federation — no key
+# files). Gates: fmt-check + validate before plan; the plan is saved and applied as-is.
+# Skips gracefully until GCP secrets are configured (INIT.md step 5).
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # WIF keyless auth
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gate on GCP configuration
+        id: gate
+        run: echo "configured=${{ secrets.GCP_WIF_PROVIDER != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve project for ${{ inputs.environment }}
+        if: steps.gate.outputs.configured == 'true'
+        run: echo "GCP_PROJECT_ID=${{ inputs.environment == 'prod' && secrets.GCP_PROJECT_ID_PROD || secrets.GCP_PROJECT_ID_DEV }}" >> "$GITHUB_ENV"
+
+      - uses: google-github-actions/auth@v2
+        if: steps.gate.outputs.configured == 'true'
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.gate.outputs.configured == 'true'
+
+      - name: Terraform fmt + validate
+        if: steps.gate.outputs.configured == 'true'
+        working-directory: terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend-config="bucket=${GCP_PROJECT_ID}-tf-state"
+          terraform validate
+
+      - name: Plan
+        if: steps.gate.outputs.configured == 'true'
+        working-directory: terraform
+        run: terraform plan -var "project_id=${GCP_PROJECT_ID}" -var "env=${{ inputs.environment }}" -out=tfplan
+
+      - name: Upload plan artifact
+        if: steps.gate.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}
+          path: terraform/tfplan
+          retention-days: 7
+
+      - name: Apply
+        if: steps.gate.outputs.configured == 'true'
+        working-directory: terraform
+        run: terraform apply tfplan

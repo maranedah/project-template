@@ -1,0 +1,84 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Runtime topology SSOT. Order: db → migrate → backend → frontend (+ worker,
+# disabled). Host ports come from .env (incremental per project, INIT.md step 3).
+#
+# NO HOT RELOAD in any service — a reload watcher SIGKILLs in-flight work and
+# corrupts measurements: docs/04-findings/0001-no-hot-reload-in-compose.md.
+# Source is bind-mounted; apply code changes with `docker compose restart backend`.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    ports:
+      - "${APP_DB_PORT:-5532}:5432"   # host access for psql / alembic autogenerate
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  # Applies alembic migrations, then exits. Backend waits for it to complete.
+  migrate:
+    build: ./backend/db
+    environment:
+      APP_DATABASE_SYNC_URL: postgresql+psycopg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-app}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build: ./backend
+    environment:
+      # In-network DB URL (service name `db`); host-side URLs live in .env.
+      APP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-app}
+      APP_ENV: ${APP_ENV:-local}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+    # Explicit command (no --reload — see header). logging.yaml duplicates ERROR+
+    # lines into var/log/backend-errors.log (bind-mounted below) for one-file debugging.
+    command: ["uvicorn", "--factory", "app.composition:build_api", "--host", "0.0.0.0", "--port", "8000", "--log-config", "logging.yaml"]
+    ports:
+      - "${APP_BACKEND_PORT:-8100}:8000"
+    volumes:
+      - ./backend/app:/srv/app          # code changes: docker compose restart backend
+      - ./backend/var/log:/srv/var/log          # error logs readable from the host (make logs-errors)
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${APP_FRONTEND_PORT:-3100}:80"  # nginx serves dist/ and proxies /api → backend
+    depends_on:
+      - backend
+
+  # ── Worker (disabled) ─────────────────────────────────────────────────────
+  # Enable for long-running/retryable jobs (>30 s): uncomment; migration 0002 (jobs
+  # table) is already applied. When to use + cloud variants:
+  # docs/03-technical/04-architecture-definition/01-cloud-stack.md §workers.
+  # worker:
+  #   build: ./backend
+  #   command: ["python", "-m", "app.worker"]
+  #   environment:
+  #     APP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-app}
+  #     APP_WORKER_ID: ${APP_WORKER_ID:-worker-local}
+  #     APP_WORKER_POLL_INTERVAL: ${APP_WORKER_POLL_INTERVAL:-2.0}
+  #     APP_JOB_LEASE_SECONDS: ${APP_JOB_LEASE_SECONDS:-300}
+  #     APP_JOB_MAX_ATTEMPTS: ${APP_JOB_MAX_ATTEMPTS:-3}
+  #   volumes:
+  #     - ./backend/app:/srv/app
+  #     - ./backend/var/log:/srv/var/log        # worker errors → var/log/worker-errors.log
+  #   depends_on:
+  #     migrate:
+  #       condition: service_completed_successfully
+  #   restart: unless-stopped           # SIGTERM → finishes current job, then exits
+
+volumes:
+  pgdata:
